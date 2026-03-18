@@ -7,7 +7,7 @@ from .base import BaseRecognizer
 
 @RECOGNIZERS.register_module()
 class RecognizerGCN(BaseRecognizer):
-    """GCN-based recognizer for skeleton-based action recognition. """
+    """GCN-based recognizer for skeleton-based action recognition."""
 
     def forward_train(self, keypoint, label, **kwargs):
         """Defines the computation performed at every call when training."""
@@ -29,34 +29,34 @@ class RecognizerGCN(BaseRecognizer):
         testing."""
         assert self.with_cls_head or self.feat_ext
         bs, nc = keypoint.shape[:2]
-        keypoint = keypoint.reshape((bs * nc, ) + keypoint.shape[2:])
+        keypoint = keypoint.reshape((bs * nc,) + keypoint.shape[2:])
         check = self.cls_head.save_list()
         x, get_graph = self.extract_feat(keypoint)
-        feat_ext = self.test_cfg.get('feat_ext', False)
-        pool_opt = self.test_cfg.get('pool_opt', 'all')
-        score_ext = self.test_cfg.get('score_ext', False)
+        feat_ext = self.test_cfg.get("feat_ext", False)
+        pool_opt = self.test_cfg.get("pool_opt", "all")
+        score_ext = self.test_cfg.get("score_ext", False)
         if feat_ext or score_ext:
             assert bs == 1
             assert isinstance(pool_opt, str)
             dim_idx = dict(n=0, m=1, t=3, v=4)
 
-            if pool_opt == 'all':
-                pool_opt == 'nmtv'
-            if pool_opt != 'none':
+            if pool_opt == "all":
+                pool_opt == "nmtv"
+            if pool_opt != "none":
                 for digit in pool_opt:
                     assert digit in dim_idx
 
             if isinstance(x, tuple) or isinstance(x, list):
                 x = torch.cat(x, dim=2)
-            assert len(x.shape) == 5, 'The shape is N, M, C, T, V'
-            if pool_opt != 'none':
+            assert len(x.shape) == 5, "The shape is N, M, C, T, V"
+            if pool_opt != "none":
                 for d in pool_opt:
                     x = x.mean(dim_idx[d], keepdim=True)
 
             if score_ext:
                 w = self.cls_head.fc_cls.weight
                 b = self.cls_head.fc_cls.bias
-                x = torch.einsum('nmctv,oc->nmotv', x, w)
+                x = torch.einsum("nmctv,oc->nmotv", x, w)
                 if b is not None:
                     x = x + b[..., None, None]
                 x = x[None]
@@ -64,8 +64,8 @@ class RecognizerGCN(BaseRecognizer):
 
         cls_score = self.cls_head(x)
         cls_score = cls_score.reshape(bs, nc, cls_score.shape[-1])
-        if 'average_clips' not in self.test_cfg:
-            self.test_cfg['average_clips'] = 'prob'
+        if "average_clips" not in self.test_cfg:
+            self.test_cfg["average_clips"] = "prob"
 
         cls_score = self.average_clip(cls_score)
         if isinstance(cls_score, tuple) or isinstance(cls_score, list):
@@ -78,7 +78,7 @@ class RecognizerGCN(BaseRecognizer):
         """Define the computation performed at every call."""
         if return_loss:
             if label is None:
-                raise ValueError('Label should not be None.')
+                raise ValueError("Label should not be None.")
             return self.forward_train(keypoint, label, **kwargs)
 
         return self.forward_test(keypoint, **kwargs)
