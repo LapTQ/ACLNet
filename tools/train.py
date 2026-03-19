@@ -48,6 +48,7 @@ def parse_args():
         help='whether to compile the model before training / testing (only available in pytorch 2.0)')
     parser.add_argument('--local_rank', type=int, default=-1)
     parser.add_argument('--local-rank', type=int, default=-1)
+    parser.add_argument('--id_model', type=int)
     args = parser.parse_args()
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -76,6 +77,13 @@ def main():
     init_dist(args.launcher, **cfg.dist_params)
     rank, world_size = get_dist_info()
     cfg.gpu_ids = range(world_size)
+
+    id_model = args.id_model
+    print("\n\n##############################################################")
+    print(f"#                     ROUND {id_model}                               #")
+    print("##############################################################\n")
+    
+    cfg.work_dir = osp.join(cfg.work_dir, f'model_{id_model}')
 
     auto_resume = cfg.get('auto_resume', True)
     if auto_resume and cfg.get('resume_from', None) is None:

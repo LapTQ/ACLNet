@@ -1,5 +1,6 @@
 import numpy as np
 from mmcv.runner import DistEvalHook as BasicDistEvalHook
+from sklearn.metrics import recall_score
 
 
 class DistEvalHook(BasicDistEvalHook):
@@ -113,7 +114,7 @@ def mean_class_accuracy(scores, labels):
     return mean_class_acc
 
 
-def top_k_accuracy(scores, labels, topk=(1,)):
+def top_k_accuracy(scores, labels, topk=(1,), **kwargs):
     """Calculate top k accuracy score.
 
     Args:
@@ -124,15 +125,75 @@ def top_k_accuracy(scores, labels, topk=(1,)):
     Returns:
         list[float]: Top k accuracy score for each k.
     """
+    class_map = kwargs.get("class_map", None)
+    if class_map is None:
+        class_map = np.arange(len(scores[0]))
+    else:
+        assert len(class_map) == len(scores[0])
+        class_map = np.array(class_map)
     res = []
     labels = np.array(labels)[:, np.newaxis]
     for k in topk:
-        max_k_preds = np.argsort(scores, axis=1)[:, -k:][:, ::-1]
+        max_k_preds = class_map[np.argsort(scores, axis=1)][:, -k:][:, ::-1]
         match_array = np.logical_or.reduce(max_k_preds == labels, axis=1)
         topk_acc_score = match_array.sum() / match_array.shape[0]
         res.append(topk_acc_score)
 
     return res
+
+
+def harmonic_mean_recall(scores, labels, **kwargs):
+    class_map = kwargs.get("class_map", None)
+    if class_map is None:
+        class_map = np.arange(len(scores[0]))
+    else:
+        assert len(class_map) == len(scores[0])
+        class_map = np.array(class_map)
+    y_true = labels
+    y_pred = class_map[np.array(scores).argsort()[:, -1]]
+
+    class_weights = kwargs["class_weights"]
+    per_class_recall = recall_score(y_true, y_pred, average=None)
+
+    if class_weights is None:
+        class_weights = np.ones_like(per_class_recall)
+    else:
+        class_weights = np.array(class_weights)
+    
+    assert len(class_weights) == len(per_class_recall), f"Number of weights ({len(class_weights)}) must match number of classes ({len(per_class_recall)})"
+    
+    # (If a class has 0 recall but weight is 0, we can safely ignore it)
+    if np.any((per_class_recall == 0) & (class_weights > 0)):
+        return 0.0
+
+    # We only compute for classes where weight > 0 to avoid division by zero errors
+    # or 0/0 ambiguity for ignored classes.
+    active_indices = class_weights > 0
+
+    active_weights = class_weights[active_indices]
+    active_recalls = per_class_recall[active_indices]
+
+    active_weights = active_weights * active_weights
+    harmonic_mean = np.sum(active_weights) / np.sum(active_weights / active_recalls)
+
+    return harmonic_mean.item()
+
+
+def recall_macro(scores, labels, **kwargs):
+    class_map = kwargs.get("class_map", None)
+    if class_map is None:
+        class_map = np.arange(len(scores[0]))
+    else:
+        assert len(class_map) == len(scores[0])
+        class_map = np.array(class_map)
+    y_true = labels
+    y_pred = class_map[np.array(scores).argsort()[:, -1]]
+
+    class_weights = kwargs["class_weights"]
+    assert class_weights is None, "Recall macro is not supported with class weights by LapTQ"
+
+    recall = recall_score(y_true, y_pred, average="macro")
+    return recall
 
 
 def mean_average_precision(scores, labels):

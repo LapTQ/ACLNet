@@ -27,11 +27,14 @@ class RecognizerGCN(BaseRecognizer):
     def forward_test(self, keypoint, **kwargs):
         """Defines the computation performed at every call when evaluation and
         testing."""
+        to_numpy = kwargs.get("to_numpy", True)
+        return_feat = kwargs.get("return_feat", False)
         assert self.with_cls_head or self.feat_ext
         bs, nc = keypoint.shape[:2]
         keypoint = keypoint.reshape((bs * nc,) + keypoint.shape[2:])
         check = self.cls_head.save_list()
-        x, get_graph = self.extract_feat(keypoint)
+        feat, get_graph = self.extract_feat(keypoint)
+        x = feat
         feat_ext = self.test_cfg.get("feat_ext", False)
         pool_opt = self.test_cfg.get("pool_opt", "all")
         score_ext = self.test_cfg.get("score_ext", False)
@@ -60,7 +63,7 @@ class RecognizerGCN(BaseRecognizer):
                 if b is not None:
                     x = x + b[..., None, None]
                 x = x[None]
-            return x.data.cpu().numpy().astype(np.float16)
+            return x.data.cpu().numpy().astype(np.float16) if to_numpy else x
 
         cls_score = self.cls_head(x)
         cls_score = cls_score.reshape(bs, nc, cls_score.shape[-1])
@@ -69,19 +72,41 @@ class RecognizerGCN(BaseRecognizer):
 
         cls_score = self.average_clip(cls_score)
         if isinstance(cls_score, tuple) or isinstance(cls_score, list):
-            cls_score = [x.data.cpu().numpy() for x in cls_score]
+            cls_score = [(x.data.cpu().numpy() if to_numpy else x) for x in cls_score]
             return [[x[i] for x in cls_score] for i in range(bs)]
 
-        return cls_score.data.cpu().numpy()
+        ret = cls_score.data.cpu().numpy() if to_numpy else cls_score
+        if return_feat:
+            return ret, self.feat_to_emb(feat)
+        return ret
 
-    def forward(self, keypoint, label=None, return_loss=True, **kwargs):
+    def feat_to_emb(self, x):
+        B, M, C, T, V = x.shape
+        assert M == 1, "If error, consider .view(B * M, C, T, V)"
+        x = x.view(B, C, T, V)
+        x = x.mean(dim=(2, 3))
+        return x
+
+    def forward(
+        self,
+        keypoint,
+        label=None,
+        return_loss=True,
+        return_feat=False,
+        to_numpy=True,
+        already_merged__batchsize_numclips_numpersons=False,
+        **kwargs
+    ):
         """Define the computation performed at every call."""
+        if already_merged__batchsize_numclips_numpersons:
+            B, C, T, V = keypoint.shape
+            keypoint = keypoint.permute(0, 2, 3, 1).view(B, 1, 1, T, V, C)
         if return_loss:
             if label is None:
                 raise ValueError("Label should not be None.")
             return self.forward_train(keypoint, label, **kwargs)
 
-        return self.forward_test(keypoint, **kwargs)
+        return self.forward_test(keypoint, to_numpy=to_numpy, **kwargs)
 
     def extract_feat(self, keypoint):
 

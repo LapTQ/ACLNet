@@ -10,7 +10,7 @@ from mmcv.utils import print_log
 from torch.utils.data import Dataset
 
 from aclnet.smp import auto_mix2
-from ..core import mean_average_precision, mean_class_accuracy, top_k_accuracy
+from ..core import mean_average_precision, mean_class_accuracy, top_k_accuracy, harmonic_mean_recall, recall_macro
 from .pipelines import Compose
 
 
@@ -164,7 +164,7 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
                 metric_options['top_k_accuracy'], **deprecated_kwargs)
 
         metrics = metrics if isinstance(metrics, (list, tuple)) else [metrics]
-        allowed_metrics = ['top_k_accuracy', 'mean_class_accuracy', 'mean_average_precision']
+        allowed_metrics = ['top_k_accuracy', 'mean_class_accuracy', 'mean_average_precision', 'harmonic_mean_recall', 'recall_macro']
 
         for metric in metrics:
             if metric not in allowed_metrics:
@@ -189,7 +189,7 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
                 if isinstance(topk, int):
                     topk = (topk, )
 
-                top_k_acc = top_k_accuracy(results, gt_labels, topk)
+                top_k_acc = top_k_accuracy(results, gt_labels, topk, **deprecated_kwargs)
                 log_msg = []
                 for k, acc in zip(topk, top_k_acc):
                     eval_results[f'top{k}_acc'] = acc
@@ -213,6 +213,20 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
                 mAP = mean_average_precision(results, gt_labels_arrays)
                 eval_results['mean_average_precision'] = mAP
                 log_msg = f'\nmean_average_precision\t{mAP:.4f}'
+                print_log(log_msg, logger=logger)
+                continue
+
+            if metric == "harmonic_mean_recall":
+                harmonic_recall = harmonic_mean_recall(results, gt_labels, **deprecated_kwargs)
+                eval_results['harmonic_mean_recall'] = harmonic_recall
+                log_msg = f'\nharmonic_mean_recall\t{harmonic_recall:.4f}'
+                print_log(log_msg, logger=logger)
+                continue
+
+            if metric == "recall_macro":
+                rec = recall_macro(results, gt_labels, **deprecated_kwargs)
+                eval_results['recall_macro'] = rec
+                log_msg = f'\nrecall_macro\t{rec:.4f}'
                 print_log(log_msg, logger=logger)
                 continue
 

@@ -151,6 +151,46 @@ class PreNormalize3D:
 
 
 @PIPELINES.register_module()
+class Normalize_01_to_neg11:
+    """Normalize keypoints from [0, 1] to [-1, 1]."""
+
+    def __call__(self, results):
+        # assume: keypoint is of shape (M (i.e., num_person), seq_len, num_joints, 2)
+        keypoint = results["keypoint"].copy()
+        keypoint[:, :, :, :2] = keypoint[:, :, :, :2] * 2 - 1
+        results["keypoint"] = keypoint
+        return results
+
+
+@PIPELINES.register_module()
+class NormalizeByMinMaxKeypoints:
+    """Normalize keypoints from [0, 1] to [-1, 1]."""
+
+    def __call__(self, results):
+        # assume: keypoint is of shape (M (i.e., num_person), seq_len, num_joints, 2)
+        keypoint = results["keypoint"].copy()
+        kmin = np.min(keypoint, axis=2, keepdims=True)
+        kmax = np.max(keypoint, axis=2, keepdims=True)
+        keypoint = (keypoint - kmin) / (kmax - kmin + 1e-8)  # scale w.r.t min/max
+        results["keypoint"] = keypoint
+        return results
+
+
+@PIPELINES.register_module()
+class SelectKeypoints:
+
+    def __init__(self, indexes):
+        self.indexes = indexes
+
+    def __call__(self, results):
+        # assume: keypoint is of shape (M (i.e., num_person), seq_len, num_joints, 2)
+        keypoint = results["keypoint"].copy()
+        keypoint = keypoint[:, :, self.indexes, :]
+        results["keypoint"] = keypoint
+        return results
+
+
+@PIPELINES.register_module()
 class RandomRot:
 
     def __init__(self, theta=0.3):
@@ -355,7 +395,7 @@ class Kinetics_Transform:
 @PIPELINES.register_module()
 class JointToBone:
 
-    def __init__(self, dataset="nturgb+d", target="keypoint"):
+    def __init__(self, dataset, target="keypoint"):
         self.dataset = dataset
         self.target = target
         if self.dataset not in [
@@ -364,6 +404,8 @@ class JointToBone:
             "openpose_new",
             "coco",
             "coco_new",
+            "coco_headless",
+            "coco_onlyhand",
         ]:
             raise ValueError(f"The dataset type {self.dataset} is not supported")
         if self.dataset == "nturgb+d":
@@ -481,6 +523,30 @@ class JointToBone:
                 (18, 19),
                 (19, 19),
             )
+        elif self.dataset == "coco_headless":
+            self.pairs = (
+                (0, 1),
+                (1, 0),
+                (2, 0),
+                (3, 2),
+                (4, 2),
+                (5, 3),
+                (6, 0),
+                (7, 1),
+                (8, 6),
+                (9, 7),
+                (10, 8),
+                (11, 9),
+            )
+        elif self.dataset == "coco_onlyhand":
+            self.pairs = (
+                (0, 1),
+                (1, 0),
+                (2, 0),
+                (3, 2),
+                (4, 2),
+                (5, 3),
+            )
 
     def __call__(self, results):
 
@@ -517,6 +583,8 @@ class JointToKB:
             "openpose_new",
             "coco",
             "coco_new",
+            "coco_headless",
+            "coco_onlyhand",
         ]:
             raise ValueError(f"The dataset type {self.dataset} is not supported")
         if self.dataset == "nturgb+d":
@@ -634,6 +702,30 @@ class JointToKB:
                 (18, 18),
                 (19, 19),
             )
+        elif self.dataset == "coco_headless":
+            self.pairs = (
+                (0, 0),
+                (1, 1),
+                (2, 1),
+                (3, 0),
+                (4, 0),
+                (5, 1),
+                (6, 6),
+                (7, 7),
+                (8, 0),
+                (9, 1),
+                (10, 6),
+                (11, 7),
+            )
+        elif self.dataset == "coco_onlyhand":
+            self.pairs = (
+                (0, 0),
+                (1, 1),
+                (2, 1),
+                (3, 0),
+                (4, 0),
+                (5, 1),
+            )
 
     def __call__(self, results):
 
@@ -644,7 +736,7 @@ class JointToKB:
         assert C in [2, 3]
         for v1, v2 in self.pairs:
             bone[..., v1, :] = keypoint[..., v1, :] - keypoint[..., v2, :]
-            if C == 3 and self.dataset in ["openpose", "coco"]:
+            if C == 3 and self.dataset in ["openpose", "coco", "coco_headless", "coco_onlyhand"]:
                 score = (keypoint[..., v1, 2] + keypoint[..., v2, 2]) / 2
                 bone[..., v1, 2] = score
 
@@ -776,6 +868,27 @@ class FormatGCNInput:
             + f"(num_person={self.num_person}, mode={self.mode})"
         )
         return repr_str
+
+
+@PIPELINES.register_module()
+class FormatGCNInput_v2:
+
+    def __call__(self, results):
+        # format keypoint from (1, 15, 17, 2) to (1, 1, 15, 17, 2)
+        keypoint = results["keypoint"].copy()
+        keypoint = keypoint[np.newaxis, ...].astype(
+            np.float32
+        )  # add a new axis for num_clips
+        results["keypoint"] = torch.from_numpy(np.ascontiguousarray(keypoint))
+        hand_crops = results.get("hand_crops", None)
+        results = {
+            "keypoint": results["keypoint"],
+            "label": results["label"],
+        }
+        if hand_crops is not None:
+            hand_crops = torch.stack(hand_crops)
+            results["hand_crops"] = hand_crops  # (num hands per person, 3, H, W)
+        return results
 
 
 @PIPELINES.register_module()
