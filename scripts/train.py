@@ -10,7 +10,7 @@ ls_path_cfg = [
     # str(ACLNET_DIR / "configs/fs26" / "j.py"),
 ]
 num_models = 10
-ls_devices = [5, 5, 5, 4, 4, 4, 3, 3, 3, 2]
+ls_devices = [5, 5, 5, 4, 4, 5, 5, 5, 4, 4]
 
 import subprocess
 import multiprocessing as mp
