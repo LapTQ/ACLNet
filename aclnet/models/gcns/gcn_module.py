@@ -142,6 +142,6 @@ class GCN_Module(nn.Module):
         c_graph = x.size(2)
         graph = get_graph[0][-1]
         # N V*V
-        graph = graph.view(N, M, c_graph, V, V).mean(1).mean(1).view(N, -1)
+        graph = graph.view(N, M, -1, V, V).mean(1).mean(1).view(N, -1)
         
         return x, graph
