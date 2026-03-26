@@ -149,7 +149,13 @@ class unit_gcn(nn.Module):
                 A = A.squeeze(2)
                 x = torch.einsum('nkctv,nktvw->nkctw', pre_x, A).contiguous()
             elif A.shape[3] == 1:
-                A = A.squeeze(3)
+                
+                # A = A.squeeze(3)
+                # laptq: bypass ONNX -> TRT error
+                D0, D1, D2, D3, D4, D5 = A.shape
+                A = A.reshape(D0, D1, D2, D4, D5)
+                # ===============================
+
                 # N K C T V = N K C T V * N K C V V
                 x = torch.einsum('nkctv,nkcvw->nkctw', pre_x, A).contiguous()
             else:

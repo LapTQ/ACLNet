@@ -9,6 +9,7 @@ model = dict(
         gcn_ctr="T",
         gcn_ada="T",
         in_channels=2,
+        num_person=1,
         tcn_ms_cfg=[(3, 1), (3, 2), (3, 3), (3, 4), ("max", 3), "1x1"],
         graph_cfg=dict(
             layout=graph, mode="random", num_filter=8, init_off=0.04, init_std=0.02
